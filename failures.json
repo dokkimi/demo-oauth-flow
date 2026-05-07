@@ -1,0 +1,2606 @@
+{
+  "runId": "a7361f71-d08a-41bb-bb93-36dc30d7390e",
+  "status": "FAILED",
+  "createdAt": "2026-05-07T19:08:21.276Z",
+  "completedAt": "2026-05-07T19:08:44.805Z",
+  "instances": [
+    {
+      "name": "oauth-failure-cases",
+      "status": "STOPPED",
+      "testStatus": "FAILED",
+      "errorMessage": "Fatal error for pod \"api-service-5cf6764745-p9kfj\": container \"api-service\" image \"demo-oauth-flow:latest\" — CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-5cf6764745-p9kfj_dokkimi-b429bc6c-b8d4-441f-9267-2493fa2879aa(c558aefc-4666-4598-a2be-d3048306ad28)",
+      "definition": {
+        "name": "oauth-failure-cases",
+        "description": "Tests how the service handles OAuth provider failures — uses mocks that return errors instead of success responses",
+        "items": [
+          {
+            "type": "SERVICE",
+            "name": "api-service",
+            "image": "demo-oauth-flow:latest",
+            "port": 3000,
+            "healthCheck": "/health",
+            "env": {
+              "DATABASE_URL": "postgresql://dokkimi:dokkimi@postgres-db:5432/dokkimi",
+              "OAUTH_DOMAIN": "auth.provider.com",
+              "OAUTH_CLIENT_ID": "demo-client-id",
+              "OAUTH_CLIENT_SECRET": "demo-client-secret",
+              "OAUTH_REDIRECT_URI": "http://api-service:3000/auth/callback",
+              "NODE_ENV": "test"
+            }
+          },
+          {
+            "type": "DATABASE",
+            "name": "postgres-db",
+            "database": "postgres",
+            "initFiles": [
+              {
+                "filename": "schema.sql"
+              }
+            ]
+          },
+          {
+            "type": "MOCK",
+            "name": "mock-oauth-token-rejected",
+            "description": "Simulates the OAuth provider rejecting an invalid authorization code",
+            "mockMethod": "POST",
+            "mockTarget": "auth.provider.com",
+            "mockPath": "/oauth/token",
+            "mockResponseStatus": 400,
+            "mockResponseHeaders": {
+              "Content-Type": "application/json"
+            },
+            "mockResponseBody": {
+              "error": "invalid_grant",
+              "error_description": "The authorization code has expired or is invalid."
+            }
+          },
+          {
+            "type": "MOCK",
+            "name": "mock-oauth-userinfo-noop",
+            "description": "Userinfo mock that should never be called (token exchange fails first)",
+            "mockMethod": "GET",
+            "mockTarget": "auth.provider.com",
+            "mockPath": "/userinfo",
+            "mockResponseStatus": 200,
+            "mockResponseHeaders": {
+              "Content-Type": "application/json"
+            },
+            "mockResponseBody": {
+              "sub": "should-not-reach",
+              "email": "nope@example.com",
+              "name": "Nope"
+            }
+          }
+        ],
+        "tests": [
+          {
+            "name": "Token exchange failure returns 500 and creates no user",
+            "description": "When the OAuth provider rejects the code, our service should fail gracefully without creating a user",
+            "steps": [
+              {
+                "name": "Callback with rejected code",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/callback?code=expired_code&state=test"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 500
+                      },
+                      {
+                        "path": "response.body.message",
+                        "operator": "eq",
+                        "value": "Authentication failed"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "POST",
+                      "url": "auth.provider.com/oauth/token"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 1
+                    },
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 400
+                      },
+                      {
+                        "path": "response.body.error",
+                        "operator": "eq",
+                        "value": "invalid_grant"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "GET",
+                      "url": "auth.provider.com/userinfo"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 0
+                    }
+                  },
+                  {
+                    "service": "api-service",
+                    "consoleAssertions": [
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Token exchange failed"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "OAuth callback failed"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "No user was created in the database",
+                "action": {
+                  "type": "dbQuery",
+                  "database": "postgres-db",
+                  "query": "SELECT COUNT(*) as count FROM users WHERE oauth_id != 'oauth_user_alice'"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "data[0].count",
+                        "operator": "eq",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "5418a171-725b-4d2e-abbc-6ea54ddd3b46",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "itemDefinitionName": "api-service",
+          "status": "STOPPED",
+          "readinessStatus": "NOT_READY",
+          "readinessLastChecked": "2026-05-07T19:08:30.914Z",
+          "k8sName": "api-service",
+          "createdAt": "2026-05-07T19:08:21.293Z",
+          "updatedAt": "2026-05-07T19:08:33.674Z"
+        },
+        {
+          "id": "b5ccde1f-0d03-4190-8cb5-d8a8f4637c33",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "itemDefinitionName": "postgres-db",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.722Z",
+          "k8sName": "postgres-db",
+          "createdAt": "2026-05-07T19:08:21.294Z",
+          "updatedAt": "2026-05-07T19:08:33.674Z"
+        },
+        {
+          "id": "70c8ca38-a160-403e-9f5c-e1ddb0f5152c",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "itemDefinitionName": "mock-oauth-token-rejected",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.722Z",
+          "k8sName": "mock-oauth-token-rejected",
+          "createdAt": "2026-05-07T19:08:21.294Z",
+          "updatedAt": "2026-05-07T19:08:33.674Z"
+        },
+        {
+          "id": "e34fc2a3-6709-44b9-a3d8-1b9f72a6335f",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "itemDefinitionName": "mock-oauth-userinfo-noop",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.722Z",
+          "k8sName": "mock-oauth-userinfo-noop",
+          "createdAt": "2026-05-07T19:08:21.295Z",
+          "updatedAt": "2026-05-07T19:08:33.674Z"
+        }
+      ],
+      "testExecutionLogs": [
+        {
+          "id": "281bfd4c-5793-4742-9917-3ae0253ec57d",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "STARTED",
+          "message": "Preparing test environment...",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:23.661Z"
+        },
+        {
+          "id": "b22f77ff-cb45-4963-9e6d-1dd0efa7c455",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "HEALTH_WAIT_STARTED",
+          "message": "Waiting for services to be ready...",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:23.661Z"
+        },
+        {
+          "id": "764771d0-1a76-411b-84f5-b38a439899a6",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "HEALTH_ITEM_READY",
+          "message": "postgres-db is ready",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:28.712Z"
+        },
+        {
+          "id": "82955796-6ca9-4526-9056-bd634fd494b9",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "HEALTH_TIMEOUT",
+          "message": "Fatal error for pod \"api-service-5cf6764745-p9kfj\": container \"api-service\" image \"demo-oauth-flow:latest\" — CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-5cf6764745-p9kfj_dokkimi-b429bc6c-b8d4-441f-9267-2493fa2879aa(c558aefc-4666-4598-a2be-d3048306ad28)",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.681Z"
+        },
+        {
+          "id": "10d24068-1c98-42d2-a87f-8c08bf55b602",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "POD_LOGS",
+          "message": "[item:api-service] [pod:api-service-5cf6764745-p9kfj] [container:api-service]\nWaiting reason: CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-5cf6764745-p9kfj_dokkimi-b429bc6c-b8d4-441f-9267-2493fa2879aa(c558aefc-4666-4598-a2be-d3048306ad28)\nTermination reason: Error — exit code 1\n\n(no container logs available)\n",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.694Z"
+        },
+        {
+          "id": "8e1b9c42-09d8-47db-8ec3-91c9d591c594",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 0 skipped — test-agent reported failure",
+          "stepIndex": 0,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.713Z"
+        },
+        {
+          "id": "7a1e5a1c-438d-417b-973d-d822c1b4ad37",
+          "instanceId": "b429bc6c-b8d4-441f-9267-2493fa2879aa",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 1 skipped — test-agent reported failure",
+          "stepIndex": 1,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.716Z"
+        }
+      ],
+      "assertionResults": [
+        {
+          "requestId": null,
+          "stepIndex": 0,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.712Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 1,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.715Z"
+        }
+      ],
+      "httpLogs": [],
+      "databaseLogs": [],
+      "consoleLogs": [
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:31.474 UTC [1] LOG:  received fast shutdown request",
+          "timestamp": "2026-05-07T19:08:31.474Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.006 UTC [1] LOG:  database system is ready to accept connections",
+          "timestamp": "2026-05-07T19:08:28.006Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.998 UTC [67] LOG:  database system was shut down at 2026-05-07 19:08:27 UTC",
+          "timestamp": "2026-05-07T19:08:27.998Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.980 UTC [1] LOG:  listening on Unix socket \"/var/run/postgresql/.s.PGSQL.5432\"",
+          "timestamp": "2026-05-07T19:08:27.980Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.963 UTC [1] LOG:  starting PostgreSQL 15.17 (Debian 15.17-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+          "timestamp": "2026-05-07T19:08:27.963Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.963 UTC [1] LOG:  listening on IPv4 address \"0.0.0.0\", port 5432",
+          "timestamp": "2026-05-07T19:08:27.963Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.963 UTC [1] LOG:  listening on IPv6 address \"::\", port 5432",
+          "timestamp": "2026-05-07T19:08:27.963Z"
+        },
+        {
+          "level": "INFO",
+          "message": "PostgreSQL init process complete; ready for start up.",
+          "timestamp": "2026-05-07T19:08:27.947Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.947Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.940Z"
+        },
+        {
+          "level": "INFO",
+          "message": " done",
+          "timestamp": "2026-05-07T19:08:27.938Z"
+        },
+        {
+          "level": "INFO",
+          "message": "server stopped",
+          "timestamp": "2026-05-07T19:08:27.938Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.854 UTC [49] LOG:  database system is shut down",
+          "timestamp": "2026-05-07T19:08:27.854Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.849 UTC [50] LOG:  checkpoint complete: wrote 940 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.060 s, sync=0.220 s, total=0.294 s; sync files=311, longest=0.017 s, average=0.001 s; distance=4287 kB, estimate=4287 kB",
+          "timestamp": "2026-05-07T19:08:27.850Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/app/node_modules/@prisma/client/runtime/library.js:112",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "You may have to run ${qe(\"prisma generate\")} for your changes to take effect.`,this.config.clientVersion);return r}}parseEngineResponse(r){if(!r)throw new V(\"Response from the Engine was empty\",{clientVersion:this.config.clientVersion});try{return JSON.parse(r)}catch{throw new V(\"Unable to JSON.parse response from engine\",{clientVersion:this.config.clientVersion})}}async loadEngine(){if(!this.engine){this.QueryEngineConstructor||(this.library=await this.libraryLoader.loadLibrary(this.config),this.QueryEngineConstructor=this.library.QueryEngine);try{let r=new WeakRef(this);this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn));let t=await this.adapterPromise;t&&Re(\"Using driver adapter: %O\",t),this.engine=this.wrapEngine(new this.QueryEngineConstructor({datamodel:this.datamodel,env:process.env,logQueries:this.config.logQueries??!1,ignoreEnvVarErrors:!0,datasourceOverrides:this.datasourceOverrides??{},logLevel:this.logLevel,configDir:this.config.cwd,engineProtocol:\"json\",enableTracing:this.tracingHelper.isEnabled()},n=>{r.deref()?.logger(n)},t))}catch(r){let t=r,n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}}}logger(r){let t=this.parseEngineResponse(r);t&&(t.level=t?.level.toLowerCase()??\"unknown\",yf(t)?this.logEmitter.emit(\"query\",{timestamp:new Date,query:t.query,params:t.params,duration:Number(t.duration_ms),target:t.module_path}):bf(t)?this.loggerRustPanic=new ae(Po(this,`${t.message}: ${t.reason} in ${t.file}:${t.line}:${t.column}`),this.config.clientVersion):this.logEmitter.emit(t.level,{timestamp:new Date,message:t.message,target:t.module_path}))}parseInitError(r){try{return JSON.parse(r)}catch{}return r}parseRequestError(r){try{return JSON.parse(r)}catch{}return r}onBeforeExit(){throw new Error('\"beforeExit\" hook is not applicable to the library engine since Prisma 5.0.0, it is only relevant and implemented for the binary engine. Please add your event listener to the `process` object directly instead.')}async start(){if(this.libraryInstantiationPromise||(this.libraryInstantiationPromise=this.instantiateLibrary()),await this.libraryInstantiationPromise,await this.libraryStoppingPromise,this.libraryStartingPromise)return Re(`library already starting, this.libraryStarted: ${this.libraryStarted}`),this.libraryStartingPromise;if(this.libraryStarted)return;let r=async()=>{Re(\"library starting\");try{let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.connect(JSON.stringify(t)),this.libraryStarted=!0,this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn)),await this.adapterPromise,Re(\"library started\")}catch(t){let n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}finally{this.libraryStartingPromise=void 0}};return this.libraryStartingPromise=this.tracingHelper.runInChildSpan(\"connect\",r),this.libraryStartingPromise}async stop(){if(await this.libraryInstantiationPromise,await this.libraryStartingPromise,await this.executingQueryPromise,this.libraryStoppingPromise)return Re(\"library is already stopping\"),this.libraryStoppingPromise;if(!this.libraryStarted){await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0;return}let r=async()=>{await new Promise(n=>setImmediate(n)),Re(\"library stopping\");let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.disconnect(JSON.stringify(t)),this.engine?.free&&this.engine.free(),this.engine=void 0,this.libraryStarted=!1,this.libraryStoppingPromise=void 0,this.libraryInstantiationPromise=void 0,await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0,Re(\"library stopped\")};return this.libraryStoppingPromise=this.tracingHelper.runInChildSpan(\"disconnect\",r),this.libraryStoppingPromise}version(){return this.versionInfo=this.library?.version(),this.versionInfo?.version??\"unknown\"}debugPanic(r){return this.library?.debugPanic(r)}async request(r,{traceparent:t,interactiveTransaction:n}){Re(`sending request, this.libraryStarted: ${this.libraryStarted}`);let i=JSON.stringify({traceparent:t}),o=JSON.stringify(r);try{await this.start();let s=await this.adapterPromise;this.executingQueryPromise=this.engine?.query(o,i,n?.id),this.lastQuery=o;let a=this.parseEngineResponse(await this.executingQueryPromise);if(a.errors)throw a.errors.length===1?this.buildQueryError(a.errors[0],s?.errorRegistry):new V(JSON.stringify(a.errors),{clientVersion:this.config.clientVersion});if(this.loggerRustPanic)throw this.loggerRustPanic;return{data:a}}catch(s){if(s instanceof P)throw s;if(s.code===\"GenericFailure\"&&s.message?.startsWith(\"PANIC:\"))throw new ae(Po(this,s.message),this.config.clientVersion);let a=this.parseRequestError(s.message);throw typeof a==\"string\"?s:new V(`${a.message}",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "ERROR",
+          "message": "PrismaClientInitializationError: Can't reach database server at `postgres-db:5432`",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Please make sure your database server is running at `postgres-db:5432`.",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at r (/app/node_modules/@prisma/client/runtime/library.js:112:2770)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Proxy.onModuleInit (/app/dist/prisma.service.js:14:9)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Promise.all (index 0)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async callModuleInitHook (/app/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.callInitHook (/app/node_modules/@nestjs/core/nest-application-context.js:252:13)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.init (/app/node_modules/@nestjs/core/nest-application.js:103:9)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.listen (/app/node_modules/@nestjs/core/nest-application.js:175:13)",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async bootstrap (/app/dist/main.js:8:5) {",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  clientVersion: '6.19.3',",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  errorCode: 'P1001',",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  retryable: undefined",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "}",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Node.js v22.22.2",
+          "timestamp": "2026-05-07T19:08:27.699Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.562 UTC [50] LOG:  checkpoint starting: shutdown immediate",
+          "timestamp": "2026-05-07T19:08:27.562Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile, GET} route\u001b[39m\u001b[38;5;3m +7ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.557Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile/posts, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.557Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.556 UTC [50] LOG:  shutting down",
+          "timestamp": "2026-05-07T19:08:27.556Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.555 UTC [49] LOG:  background worker \"logical replication launcher\" (PID 55) exited with exit code 1",
+          "timestamp": "2026-05-07T19:08:27.555Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.550Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts/:id, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.550Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mProfileController {/api/profile}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.550Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/callback, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.549Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mPostsController {/api/posts}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.549Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/login, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.548Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/health, GET} route\u001b[39m\u001b[38;5;3m +4ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.547Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mAuthController {/auth}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.547Z"
+        },
+        {
+          "level": "INFO",
+          "message": "waiting for server to shut down....2026-05-07 19:08:27.546 UTC [49] LOG:  aborting any active transactions",
+          "timestamp": "2026-05-07T19:08:27.546Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mHealthController {/}:\u001b[39m\u001b[38;5;3m +4ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.543Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mPostsModule dependencies initialized\u001b[39m\u001b[38;5;3m +2ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.539Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAuthModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.539Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mProfileModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.539Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAppModule dependencies initialized\u001b[39m\u001b[38;5;3m +54ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.538Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.534 UTC [49] LOG:  received fast shutdown request",
+          "timestamp": "2026-05-07T19:08:27.535Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.527Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.527Z"
+        },
+        {
+          "level": "INFO",
+          "message": "INSERT 0 3",
+          "timestamp": "2026-05-07T19:08:27.526Z"
+        },
+        {
+          "level": "INFO",
+          "message": "INSERT 0 1",
+          "timestamp": "2026-05-07T19:08:27.508Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE TABLE",
+          "timestamp": "2026-05-07T19:08:27.493Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[NestFactory] \u001b[39m\u001b[32mStarting Nest application...\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.483Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE TABLE",
+          "timestamp": "2026-05-07T19:08:27.464Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.332Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.332Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/usr/local/bin/docker-entrypoint.sh: running /docker-entrypoint-initdb.d/00_schema.sql",
+          "timestamp": "2026-05-07T19:08:27.332Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE DATABASE",
+          "timestamp": "2026-05-07T19:08:27.330Z"
+        },
+        {
+          "level": "INFO",
+          "message": " done",
+          "timestamp": "2026-05-07T19:08:27.038Z"
+        },
+        {
+          "level": "INFO",
+          "message": "server started",
+          "timestamp": "2026-05-07T19:08:27.038Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.020 UTC [49] LOG:  database system is ready to accept connections",
+          "timestamp": "2026-05-07T19:08:27.020Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:26.998 UTC [52] LOG:  database system was shut down at 2026-05-07 19:08:26 UTC",
+          "timestamp": "2026-05-07T19:08:26.998Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:26.971 UTC [49] LOG:  listening on Unix socket \"/var/run/postgresql/.s.PGSQL.5432\"",
+          "timestamp": "2026-05-07T19:08:26.971Z"
+        },
+        {
+          "level": "INFO",
+          "message": "waiting for server to start....2026-05-07 19:08:26.966 UTC [49] LOG:  starting PostgreSQL 15.17 (Debian 15.17-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+          "timestamp": "2026-05-07T19:08:26.967Z"
+        },
+        {
+          "level": "INFO",
+          "message": "initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "syncing data to disk ... ok",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Success. You can now start the database server using:",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    pg_ctl -D /var/lib/postgresql/data -l logfile start",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.893Z"
+        },
+        {
+          "level": "INFO",
+          "message": "initdb: warning: enabling \"trust\" authentication for local connections",
+          "timestamp": "2026-05-07T19:08:26.892Z"
+        },
+        {
+          "level": "INFO",
+          "message": "performing post-bootstrap initialization ... ok",
+          "timestamp": "2026-05-07T19:08:26.314Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/app/node_modules/@prisma/client/runtime/library.js:112",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "You may have to run ${qe(\"prisma generate\")} for your changes to take effect.`,this.config.clientVersion);return r}}parseEngineResponse(r){if(!r)throw new V(\"Response from the Engine was empty\",{clientVersion:this.config.clientVersion});try{return JSON.parse(r)}catch{throw new V(\"Unable to JSON.parse response from engine\",{clientVersion:this.config.clientVersion})}}async loadEngine(){if(!this.engine){this.QueryEngineConstructor||(this.library=await this.libraryLoader.loadLibrary(this.config),this.QueryEngineConstructor=this.library.QueryEngine);try{let r=new WeakRef(this);this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn));let t=await this.adapterPromise;t&&Re(\"Using driver adapter: %O\",t),this.engine=this.wrapEngine(new this.QueryEngineConstructor({datamodel:this.datamodel,env:process.env,logQueries:this.config.logQueries??!1,ignoreEnvVarErrors:!0,datasourceOverrides:this.datasourceOverrides??{},logLevel:this.logLevel,configDir:this.config.cwd,engineProtocol:\"json\",enableTracing:this.tracingHelper.isEnabled()},n=>{r.deref()?.logger(n)},t))}catch(r){let t=r,n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}}}logger(r){let t=this.parseEngineResponse(r);t&&(t.level=t?.level.toLowerCase()??\"unknown\",yf(t)?this.logEmitter.emit(\"query\",{timestamp:new Date,query:t.query,params:t.params,duration:Number(t.duration_ms),target:t.module_path}):bf(t)?this.loggerRustPanic=new ae(Po(this,`${t.message}: ${t.reason} in ${t.file}:${t.line}:${t.column}`),this.config.clientVersion):this.logEmitter.emit(t.level,{timestamp:new Date,message:t.message,target:t.module_path}))}parseInitError(r){try{return JSON.parse(r)}catch{}return r}parseRequestError(r){try{return JSON.parse(r)}catch{}return r}onBeforeExit(){throw new Error('\"beforeExit\" hook is not applicable to the library engine since Prisma 5.0.0, it is only relevant and implemented for the binary engine. Please add your event listener to the `process` object directly instead.')}async start(){if(this.libraryInstantiationPromise||(this.libraryInstantiationPromise=this.instantiateLibrary()),await this.libraryInstantiationPromise,await this.libraryStoppingPromise,this.libraryStartingPromise)return Re(`library already starting, this.libraryStarted: ${this.libraryStarted}`),this.libraryStartingPromise;if(this.libraryStarted)return;let r=async()=>{Re(\"library starting\");try{let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.connect(JSON.stringify(t)),this.libraryStarted=!0,this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn)),await this.adapterPromise,Re(\"library started\")}catch(t){let n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}finally{this.libraryStartingPromise=void 0}};return this.libraryStartingPromise=this.tracingHelper.runInChildSpan(\"connect\",r),this.libraryStartingPromise}async stop(){if(await this.libraryInstantiationPromise,await this.libraryStartingPromise,await this.executingQueryPromise,this.libraryStoppingPromise)return Re(\"library is already stopping\"),this.libraryStoppingPromise;if(!this.libraryStarted){await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0;return}let r=async()=>{await new Promise(n=>setImmediate(n)),Re(\"library stopping\");let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.disconnect(JSON.stringify(t)),this.engine?.free&&this.engine.free(),this.engine=void 0,this.libraryStarted=!1,this.libraryStoppingPromise=void 0,this.libraryInstantiationPromise=void 0,await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0,Re(\"library stopped\")};return this.libraryStoppingPromise=this.tracingHelper.runInChildSpan(\"disconnect\",r),this.libraryStoppingPromise}version(){return this.versionInfo=this.library?.version(),this.versionInfo?.version??\"unknown\"}debugPanic(r){return this.library?.debugPanic(r)}async request(r,{traceparent:t,interactiveTransaction:n}){Re(`sending request, this.libraryStarted: ${this.libraryStarted}`);let i=JSON.stringify({traceparent:t}),o=JSON.stringify(r);try{await this.start();let s=await this.adapterPromise;this.executingQueryPromise=this.engine?.query(o,i,n?.id),this.lastQuery=o;let a=this.parseEngineResponse(await this.executingQueryPromise);if(a.errors)throw a.errors.length===1?this.buildQueryError(a.errors[0],s?.errorRegistry):new V(JSON.stringify(a.errors),{clientVersion:this.config.clientVersion});if(this.loggerRustPanic)throw this.loggerRustPanic;return{data:a}}catch(s){if(s instanceof P)throw s;if(s.code===\"GenericFailure\"&&s.message?.startsWith(\"PANIC:\"))throw new ae(Po(this,s.message),this.config.clientVersion);let a=this.parseRequestError(s.message);throw typeof a==\"string\"?s:new V(`${a.message}",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "ERROR",
+          "message": "PrismaClientInitializationError: Can't reach database server at `postgres-db:5432`",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Please make sure your database server is running at `postgres-db:5432`.",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at r (/app/node_modules/@prisma/client/runtime/library.js:112:2770)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Proxy.onModuleInit (/app/dist/prisma.service.js:14:9)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Promise.all (index 0)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async callModuleInitHook (/app/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.callInitHook (/app/node_modules/@nestjs/core/nest-application-context.js:252:13)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.init (/app/node_modules/@nestjs/core/nest-application.js:103:9)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.listen (/app/node_modules/@nestjs/core/nest-application.js:175:13)",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async bootstrap (/app/dist/main.js:8:5) {",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  clientVersion: '6.19.3',",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  errorCode: 'P1001',",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  retryable: undefined",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "}",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Node.js v22.22.2",
+          "timestamp": "2026-05-07T19:08:26.176Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.051Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile/posts, POST} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.051Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mProfileController {/api/profile}:\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.050Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.049Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts/:id, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.049Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/callback, GET} route\u001b[39m\u001b[38;5;3m +3ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.048Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mPostsController {/api/posts}:\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.048Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/login, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.044Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/health, GET} route\u001b[39m\u001b[38;5;3m +8ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.043Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mAuthController {/auth}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.043Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mHealthController {/}:\u001b[39m\u001b[38;5;3m +10ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.036Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mPostsModule dependencies initialized\u001b[39m\u001b[38;5;3m +4ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.026Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAuthModule dependencies initialized\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.026Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mProfileModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.026Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAppModule dependencies initialized\u001b[39m\u001b[38;5;3m +68ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.025Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:25 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[NestFactory] \u001b[39m\u001b[32mStarting Nest application...\u001b[39m",
+          "timestamp": "2026-05-07T19:08:25.952Z"
+        },
+        {
+          "level": "INFO",
+          "message": "running bootstrap script ... ok",
+          "timestamp": "2026-05-07T19:08:25.520Z"
+        },
+        {
+          "level": "INFO",
+          "message": "creating configuration files ... ok",
+          "timestamp": "2026-05-07T19:08:25.244Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default time zone ... Etc/UTC",
+          "timestamp": "2026-05-07T19:08:25.243Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default shared_buffers ... 128MB",
+          "timestamp": "2026-05-07T19:08:25.235Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default max_connections ... 100",
+          "timestamp": "2026-05-07T19:08:25.196Z"
+        },
+        {
+          "level": "INFO",
+          "message": "creating subdirectories ... ok",
+          "timestamp": "2026-05-07T19:08:25.162Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting dynamic shared memory implementation ... posix",
+          "timestamp": "2026-05-07T19:08:25.162Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The files belonging to this database system will be owned by user \"postgres\".",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "This user must also own the server process.",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The database cluster will be initialized with locale \"en_US.utf8\".",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The default database encoding has accordingly been set to \"UTF8\".",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The default text search configuration will be set to \"english\".",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Data page checksums are disabled.",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        },
+        {
+          "level": "INFO",
+          "message": "fixing permissions on existing directory /var/lib/postgresql/data ... ok",
+          "timestamp": "2026-05-07T19:08:25.159Z"
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "oauth-redirect-flow",
+      "status": "STOPPED",
+      "testStatus": "FAILED",
+      "errorMessage": "Fatal error for pod \"api-service-7967679d8d-pw4ll\": container \"api-service\" image \"demo-oauth-flow:latest\" — CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-7967679d8d-pw4ll_dokkimi-df25edfd-7030-42c7-bb88-5d78cd40d0dd(f15244ff-8e6a-4b39-b714-361f469f5a00)",
+      "definition": {
+        "name": "oauth-redirect-flow",
+        "description": "Tests every endpoint in the OAuth redirect flow independently — login redirect, callback with mocked token exchange and userinfo, and auth rejection",
+        "items": [
+          {
+            "type": "SERVICE",
+            "name": "api-service",
+            "image": "demo-oauth-flow:latest",
+            "port": 3000,
+            "healthCheck": "/health",
+            "env": {
+              "DATABASE_URL": "postgresql://dokkimi:dokkimi@postgres-db:5432/dokkimi",
+              "OAUTH_DOMAIN": "auth.provider.com",
+              "OAUTH_CLIENT_ID": "demo-client-id",
+              "OAUTH_CLIENT_SECRET": "demo-client-secret",
+              "OAUTH_REDIRECT_URI": "http://api-service:3000/auth/callback",
+              "NODE_ENV": "test"
+            }
+          },
+          {
+            "type": "DATABASE",
+            "name": "postgres-db",
+            "database": "postgres",
+            "initFiles": [
+              {
+                "filename": "schema.sql"
+              }
+            ]
+          },
+          {
+            "type": "MOCK",
+            "name": "mock-oauth-token",
+            "description": "Mocks the OAuth provider's token endpoint — exchanges an authorization code for an access token",
+            "mockMethod": "POST",
+            "mockTarget": "auth.provider.com",
+            "mockPath": "/oauth/token",
+            "mockResponseStatus": 200,
+            "mockResponseHeaders": {
+              "Content-Type": "application/json"
+            },
+            "mockResponseBody": {
+              "access_token": "mock_access_token_abc123",
+              "token_type": "Bearer",
+              "expires_in": 3600,
+              "scope": "openid profile email"
+            }
+          },
+          {
+            "type": "MOCK",
+            "name": "mock-oauth-userinfo",
+            "description": "Mocks the OAuth provider's userinfo endpoint — returns user profile for the access token",
+            "mockMethod": "GET",
+            "mockTarget": "auth.provider.com",
+            "mockPath": "/userinfo",
+            "mockResponseStatus": 200,
+            "mockResponseHeaders": {
+              "Content-Type": "application/json"
+            },
+            "mockResponseBody": {
+              "sub": "oauth_user_bob",
+              "email": "bob@example.com",
+              "name": "Bob Smith",
+              "email_verified": true
+            }
+          }
+        ],
+        "variables": {
+          "oauthDomain": "auth.provider.com",
+          "clientId": "demo-client-id"
+        },
+        "tests": [
+          {
+            "name": "GET /auth/login redirects to OAuth provider",
+            "description": "Verifies the redirect URL has the correct client_id, redirect_uri, scope, and response_type",
+            "steps": [
+              {
+                "name": "Hit login endpoint",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/login"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 302
+                      },
+                      {
+                        "path": "response.header.location",
+                        "operator": "contains",
+                        "value": "https://{{oauthDomain}}/authorize"
+                      },
+                      {
+                        "path": "response.header.location",
+                        "operator": "contains",
+                        "value": "client_id={{clientId}}"
+                      },
+                      {
+                        "path": "response.header.location",
+                        "operator": "contains",
+                        "value": "response_type=code"
+                      },
+                      {
+                        "path": "response.header.location",
+                        "operator": "contains",
+                        "value": "scope=openid+profile+email"
+                      },
+                      {
+                        "path": "response.header.location",
+                        "operator": "contains",
+                        "value": "redirect_uri="
+                      }
+                    ]
+                  },
+                  {
+                    "service": "api-service",
+                    "consoleAssertions": [
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Redirecting to OAuth provider"
+                        },
+                        "count": {
+                          "operator": "eq",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "GET /auth/callback exchanges code and creates user",
+            "description": "Simulates the OAuth provider redirecting back with a code. The service exchanges it for a token (mocked), fetches userinfo (mocked), and creates the user in the DB.",
+            "variables": {
+              "mockCode": "auth_code_xyz789"
+            },
+            "steps": [
+              {
+                "name": "Hit callback with authorization code",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/callback?code={{mockCode}}&state=test-state"
+                },
+                "extract": {
+                  "sessionToken": "$.body.token",
+                  "userId": "$.body.user.id"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 200
+                      },
+                      {
+                        "path": "response.body.token",
+                        "operator": "exists"
+                      },
+                      {
+                        "path": "response.body.user.email",
+                        "operator": "eq",
+                        "value": "bob@example.com"
+                      },
+                      {
+                        "path": "response.body.user.name",
+                        "operator": "eq",
+                        "value": "Bob Smith"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "POST",
+                      "url": "{{oauthDomain}}/oauth/token"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 1
+                    },
+                    "assertions": [
+                      {
+                        "path": "request.body.grant_type",
+                        "operator": "eq",
+                        "value": "authorization_code"
+                      },
+                      {
+                        "path": "request.body.code",
+                        "operator": "eq",
+                        "value": "{{mockCode}}"
+                      },
+                      {
+                        "path": "request.body.client_id",
+                        "operator": "eq",
+                        "value": "{{clientId}}"
+                      },
+                      {
+                        "path": "request.body.client_secret",
+                        "operator": "exists"
+                      },
+                      {
+                        "path": "request.body.redirect_uri",
+                        "operator": "exists"
+                      },
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 200
+                      },
+                      {
+                        "path": "response.body.access_token",
+                        "operator": "exists"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "GET",
+                      "url": "{{oauthDomain}}/userinfo"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 1
+                    },
+                    "assertions": [
+                      {
+                        "path": "request.header.authorization",
+                        "operator": "eq",
+                        "value": "Bearer mock_access_token_abc123"
+                      },
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 200
+                      },
+                      {
+                        "path": "response.body.email",
+                        "operator": "eq",
+                        "value": "bob@example.com"
+                      }
+                    ]
+                  },
+                  {
+                    "service": "api-service",
+                    "consoleAssertions": [
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Exchanging authorization code"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Token exchange successful"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Fetching user info"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Creating new user"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      },
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "OAuth flow complete"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Verify user was created in database",
+                "action": {
+                  "type": "dbQuery",
+                  "database": "postgres-db",
+                  "query": "SELECT * FROM users WHERE oauth_id = 'oauth_user_bob'"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "success",
+                        "operator": "eq",
+                        "value": true
+                      },
+                      {
+                        "path": "data",
+                        "operator": "length",
+                        "value": 1
+                      },
+                      {
+                        "path": "data[0].email",
+                        "operator": "eq",
+                        "value": "bob@example.com"
+                      },
+                      {
+                        "path": "data[0].name",
+                        "operator": "eq",
+                        "value": "Bob Smith"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "GET /auth/callback without code returns 401",
+            "steps": [
+              {
+                "name": "Callback with no code param",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/callback"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 401
+                      },
+                      {
+                        "path": "response.body.message",
+                        "operator": "contains",
+                        "value": "Missing authorization code"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Repeated OAuth login is idempotent",
+            "description": "Two logins with different authorization codes both hit the OAuth provider (new code = new token exchange), but only one user is created in the DB",
+            "steps": [
+              {
+                "name": "First login",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/callback?code=first_code&state=s1"
+                },
+                "extract": {
+                  "firstUserId": "$.body.user.id"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 200
+                      },
+                      {
+                        "path": "response.body.user.email",
+                        "operator": "eq",
+                        "value": "bob@example.com"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Second login with a different code",
+                "action": {
+                  "type": "httpRequest",
+                  "method": "GET",
+                  "url": "api-service/auth/callback?code=second_code&state=s2"
+                },
+                "extract": {
+                  "secondUserId": "$.body.user.id"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "response.status",
+                        "operator": "eq",
+                        "value": 200
+                      },
+                      {
+                        "path": "response.body.user.id",
+                        "operator": "eq",
+                        "value": "{{firstUserId}}"
+                      },
+                      {
+                        "path": "response.body.user.email",
+                        "operator": "eq",
+                        "value": "bob@example.com"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "POST",
+                      "url": "{{oauthDomain}}/oauth/token"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 1
+                    },
+                    "assertions": [
+                      {
+                        "path": "request.body.grant_type",
+                        "operator": "eq",
+                        "value": "authorization_code"
+                      }
+                    ]
+                  },
+                  {
+                    "match": {
+                      "origin": "api-service",
+                      "method": "GET",
+                      "url": "{{oauthDomain}}/userinfo"
+                    },
+                    "count": {
+                      "operator": "eq",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "service": "api-service",
+                    "consoleAssertions": [
+                      {
+                        "message": {
+                          "operator": "contains",
+                          "value": "Found existing user"
+                        },
+                        "count": {
+                          "operator": "gte",
+                          "value": 1
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Only one user in the database despite two logins",
+                "action": {
+                  "type": "dbQuery",
+                  "database": "postgres-db",
+                  "query": "SELECT COUNT(*) as count FROM users WHERE oauth_id = 'oauth_user_bob'"
+                },
+                "assertions": [
+                  {
+                    "assertions": [
+                      {
+                        "path": "data[0].count",
+                        "operator": "eq",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "9e14569a-d04d-411a-b0e3-8795cbf47d59",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "itemDefinitionName": "api-service",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.630Z",
+          "k8sName": "api-service",
+          "createdAt": "2026-05-07T19:08:21.301Z",
+          "updatedAt": "2026-05-07T19:08:32.657Z"
+        },
+        {
+          "id": "3f01ec79-9760-4734-97c1-ea3d11f259c8",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "itemDefinitionName": "postgres-db",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.630Z",
+          "k8sName": "postgres-db",
+          "createdAt": "2026-05-07T19:08:21.302Z",
+          "updatedAt": "2026-05-07T19:08:32.657Z"
+        },
+        {
+          "id": "fa3f7e2d-50a8-4a19-af7c-395e64cee73d",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "itemDefinitionName": "mock-oauth-token",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.630Z",
+          "k8sName": "mock-oauth-token",
+          "createdAt": "2026-05-07T19:08:21.302Z",
+          "updatedAt": "2026-05-07T19:08:32.657Z"
+        },
+        {
+          "id": "d32b71b5-341c-441c-8493-cd63e7da35fa",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "itemDefinitionName": "mock-oauth-userinfo",
+          "status": "STOPPED",
+          "readinessStatus": "UNKNOWN",
+          "readinessLastChecked": "2026-05-07T19:08:29.630Z",
+          "k8sName": "mock-oauth-userinfo",
+          "createdAt": "2026-05-07T19:08:21.303Z",
+          "updatedAt": "2026-05-07T19:08:32.657Z"
+        }
+      ],
+      "testExecutionLogs": [
+        {
+          "id": "68c8aa94-7656-4e97-b357-fc2a2158daca",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "STARTED",
+          "message": "Preparing test environment...",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:23.550Z"
+        },
+        {
+          "id": "58b9ebb0-3bab-4f4e-a814-85ee63c71b00",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "HEALTH_WAIT_STARTED",
+          "message": "Waiting for services to be ready...",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:23.556Z"
+        },
+        {
+          "id": "20d49194-ecc5-4e8d-877a-251ec781904d",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "HEALTH_ITEM_READY",
+          "message": "postgres-db is ready",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.113Z"
+        },
+        {
+          "id": "f7de8719-4352-4dc5-b843-fe9d96e98688",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "HEALTH_TIMEOUT",
+          "message": "Fatal error for pod \"api-service-7967679d8d-pw4ll\": container \"api-service\" image \"demo-oauth-flow:latest\" — CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-7967679d8d-pw4ll_dokkimi-df25edfd-7030-42c7-bb88-5d78cd40d0dd(f15244ff-8e6a-4b39-b714-361f469f5a00)",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.577Z"
+        },
+        {
+          "id": "d7575b97-ccc4-4704-bcc8-5f845abc423f",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "POD_LOGS",
+          "message": "[item:api-service] [pod:api-service-7967679d8d-pw4ll] [container:api-service]\nWaiting reason: CrashLoopBackOff: back-off 10s restarting failed container=api-service pod=api-service-7967679d8d-pw4ll_dokkimi-df25edfd-7030-42c7-bb88-5d78cd40d0dd(f15244ff-8e6a-4b39-b714-361f469f5a00)\nTermination reason: Error — exit code 1\n\n(no container logs available)\n",
+          "stepIndex": null,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.593Z"
+        },
+        {
+          "id": "838b99f9-d9bc-4400-9fd9-a2fc12ca90cf",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 0 skipped — test-agent reported failure",
+          "stepIndex": 0,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.608Z"
+        },
+        {
+          "id": "75be3430-16d9-4372-9a73-c28244804a6f",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 1 skipped — test-agent reported failure",
+          "stepIndex": 1,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.611Z"
+        },
+        {
+          "id": "a970920c-0c5a-4343-8ee9-f2a11dd33e20",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 2 skipped — test-agent reported failure",
+          "stepIndex": 2,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.614Z"
+        },
+        {
+          "id": "abb23481-f3bd-42ad-98c9-2c5850e870d6",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 3 skipped — test-agent reported failure",
+          "stepIndex": 3,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.617Z"
+        },
+        {
+          "id": "31433f46-ea75-46ec-9ea2-50bc94b2e823",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 4 skipped — test-agent reported failure",
+          "stepIndex": 4,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.619Z"
+        },
+        {
+          "id": "a5578fa2-a20c-4804-92cf-f8384c13e448",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 5 skipped — test-agent reported failure",
+          "stepIndex": 5,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.622Z"
+        },
+        {
+          "id": "7e203b2d-08b9-4011-b6e8-13aa15dfb322",
+          "instanceId": "df25edfd-7030-42c7-bb88-5d78cd40d0dd",
+          "eventType": "REQUEST_SKIPPED",
+          "message": "Step 6 skipped — test-agent reported failure",
+          "stepIndex": 6,
+          "subActionIndex": null,
+          "subStepIndex": null,
+          "actionType": null,
+          "selector": null,
+          "duration": null,
+          "error": null,
+          "errorType": null,
+          "variables": {},
+          "timestamp": "2026-05-07T19:08:29.624Z"
+        }
+      ],
+      "assertionResults": [
+        {
+          "requestId": null,
+          "stepIndex": 0,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.607Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 1,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.610Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 2,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.613Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 3,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.616Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 4,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.618Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 5,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.621Z"
+        },
+        {
+          "requestId": null,
+          "stepIndex": 6,
+          "assertionIndex": 0,
+          "assertionType": "skip",
+          "passed": false,
+          "expected": null,
+          "actual": null,
+          "error": "Step was not executed — test-agent failed before reaching this step",
+          "path": null,
+          "operator": null,
+          "blockIndex": null,
+          "resultKind": "SKIPPED",
+          "timestamp": "2026-05-07T19:08:29.623Z"
+        }
+      ],
+      "httpLogs": [],
+      "databaseLogs": [],
+      "consoleLogs": [
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:30.251 UTC [1] LOG:  received fast shutdown request",
+          "timestamp": "2026-05-07T19:08:30.251Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.119 UTC [1] LOG:  database system is ready to accept connections",
+          "timestamp": "2026-05-07T19:08:28.119Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.116 UTC [66] LOG:  database system was shut down at 2026-05-07 19:08:28 UTC",
+          "timestamp": "2026-05-07T19:08:28.116Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.113 UTC [1] LOG:  listening on Unix socket \"/var/run/postgresql/.s.PGSQL.5432\"",
+          "timestamp": "2026-05-07T19:08:28.113Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.112 UTC [1] LOG:  starting PostgreSQL 15.17 (Debian 15.17-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+          "timestamp": "2026-05-07T19:08:28.112Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.112 UTC [1] LOG:  listening on IPv4 address \"0.0.0.0\", port 5432",
+          "timestamp": "2026-05-07T19:08:28.112Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.112 UTC [1] LOG:  listening on IPv6 address \"::\", port 5432",
+          "timestamp": "2026-05-07T19:08:28.112Z"
+        },
+        {
+          "level": "INFO",
+          "message": " done",
+          "timestamp": "2026-05-07T19:08:28.100Z"
+        },
+        {
+          "level": "INFO",
+          "message": "server stopped",
+          "timestamp": "2026-05-07T19:08:28.100Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:28.100Z"
+        },
+        {
+          "level": "INFO",
+          "message": "PostgreSQL init process complete; ready for start up.",
+          "timestamp": "2026-05-07T19:08:28.100Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:28.100Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.043 UTC [48] LOG:  database system is shut down",
+          "timestamp": "2026-05-07T19:08:28.043Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:28.039 UTC [49] LOG:  checkpoint complete: wrote 940 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.026 s, sync=0.088 s, total=0.124 s; sync files=311, longest=0.009 s, average=0.001 s; distance=4287 kB, estimate=4287 kB",
+          "timestamp": "2026-05-07T19:08:28.040Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.918 UTC [49] LOG:  checkpoint starting: shutdown immediate",
+          "timestamp": "2026-05-07T19:08:27.919Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.915 UTC [49] LOG:  shutting down",
+          "timestamp": "2026-05-07T19:08:27.915Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.912Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.912Z"
+        },
+        {
+          "level": "INFO",
+          "message": "waiting for server to shut down....2026-05-07 19:08:27.898 UTC [48] LOG:  received fast shutdown request",
+          "timestamp": "2026-05-07T19:08:27.912Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.900 UTC [48] LOG:  aborting any active transactions",
+          "timestamp": "2026-05-07T19:08:27.912Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.903 UTC [48] LOG:  background worker \"logical replication launcher\" (PID 54) exited with exit code 1",
+          "timestamp": "2026-05-07T19:08:27.912Z"
+        },
+        {
+          "level": "INFO",
+          "message": "INSERT 0 3",
+          "timestamp": "2026-05-07T19:08:27.897Z"
+        },
+        {
+          "level": "INFO",
+          "message": "INSERT 0 1",
+          "timestamp": "2026-05-07T19:08:27.889Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE TABLE",
+          "timestamp": "2026-05-07T19:08:27.886Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE TABLE",
+          "timestamp": "2026-05-07T19:08:27.875Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.820Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.820Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/usr/local/bin/docker-entrypoint.sh: running /docker-entrypoint-initdb.d/00_schema.sql",
+          "timestamp": "2026-05-07T19:08:27.820Z"
+        },
+        {
+          "level": "INFO",
+          "message": "CREATE DATABASE",
+          "timestamp": "2026-05-07T19:08:27.817Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/app/node_modules/@prisma/client/runtime/library.js:112",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "You may have to run ${qe(\"prisma generate\")} for your changes to take effect.`,this.config.clientVersion);return r}}parseEngineResponse(r){if(!r)throw new V(\"Response from the Engine was empty\",{clientVersion:this.config.clientVersion});try{return JSON.parse(r)}catch{throw new V(\"Unable to JSON.parse response from engine\",{clientVersion:this.config.clientVersion})}}async loadEngine(){if(!this.engine){this.QueryEngineConstructor||(this.library=await this.libraryLoader.loadLibrary(this.config),this.QueryEngineConstructor=this.library.QueryEngine);try{let r=new WeakRef(this);this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn));let t=await this.adapterPromise;t&&Re(\"Using driver adapter: %O\",t),this.engine=this.wrapEngine(new this.QueryEngineConstructor({datamodel:this.datamodel,env:process.env,logQueries:this.config.logQueries??!1,ignoreEnvVarErrors:!0,datasourceOverrides:this.datasourceOverrides??{},logLevel:this.logLevel,configDir:this.config.cwd,engineProtocol:\"json\",enableTracing:this.tracingHelper.isEnabled()},n=>{r.deref()?.logger(n)},t))}catch(r){let t=r,n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}}}logger(r){let t=this.parseEngineResponse(r);t&&(t.level=t?.level.toLowerCase()??\"unknown\",yf(t)?this.logEmitter.emit(\"query\",{timestamp:new Date,query:t.query,params:t.params,duration:Number(t.duration_ms),target:t.module_path}):bf(t)?this.loggerRustPanic=new ae(Po(this,`${t.message}: ${t.reason} in ${t.file}:${t.line}:${t.column}`),this.config.clientVersion):this.logEmitter.emit(t.level,{timestamp:new Date,message:t.message,target:t.module_path}))}parseInitError(r){try{return JSON.parse(r)}catch{}return r}parseRequestError(r){try{return JSON.parse(r)}catch{}return r}onBeforeExit(){throw new Error('\"beforeExit\" hook is not applicable to the library engine since Prisma 5.0.0, it is only relevant and implemented for the binary engine. Please add your event listener to the `process` object directly instead.')}async start(){if(this.libraryInstantiationPromise||(this.libraryInstantiationPromise=this.instantiateLibrary()),await this.libraryInstantiationPromise,await this.libraryStoppingPromise,this.libraryStartingPromise)return Re(`library already starting, this.libraryStarted: ${this.libraryStarted}`),this.libraryStartingPromise;if(this.libraryStarted)return;let r=async()=>{Re(\"library starting\");try{let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.connect(JSON.stringify(t)),this.libraryStarted=!0,this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn)),await this.adapterPromise,Re(\"library started\")}catch(t){let n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}finally{this.libraryStartingPromise=void 0}};return this.libraryStartingPromise=this.tracingHelper.runInChildSpan(\"connect\",r),this.libraryStartingPromise}async stop(){if(await this.libraryInstantiationPromise,await this.libraryStartingPromise,await this.executingQueryPromise,this.libraryStoppingPromise)return Re(\"library is already stopping\"),this.libraryStoppingPromise;if(!this.libraryStarted){await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0;return}let r=async()=>{await new Promise(n=>setImmediate(n)),Re(\"library stopping\");let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.disconnect(JSON.stringify(t)),this.engine?.free&&this.engine.free(),this.engine=void 0,this.libraryStarted=!1,this.libraryStoppingPromise=void 0,this.libraryInstantiationPromise=void 0,await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0,Re(\"library stopped\")};return this.libraryStoppingPromise=this.tracingHelper.runInChildSpan(\"disconnect\",r),this.libraryStoppingPromise}version(){return this.versionInfo=this.library?.version(),this.versionInfo?.version??\"unknown\"}debugPanic(r){return this.library?.debugPanic(r)}async request(r,{traceparent:t,interactiveTransaction:n}){Re(`sending request, this.libraryStarted: ${this.libraryStarted}`);let i=JSON.stringify({traceparent:t}),o=JSON.stringify(r);try{await this.start();let s=await this.adapterPromise;this.executingQueryPromise=this.engine?.query(o,i,n?.id),this.lastQuery=o;let a=this.parseEngineResponse(await this.executingQueryPromise);if(a.errors)throw a.errors.length===1?this.buildQueryError(a.errors[0],s?.errorRegistry):new V(JSON.stringify(a.errors),{clientVersion:this.config.clientVersion});if(this.loggerRustPanic)throw this.loggerRustPanic;return{data:a}}catch(s){if(s instanceof P)throw s;if(s.code===\"GenericFailure\"&&s.message?.startsWith(\"PANIC:\"))throw new ae(Po(this,s.message),this.config.clientVersion);let a=this.parseRequestError(s.message);throw typeof a==\"string\"?s:new V(`${a.message}",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "ERROR",
+          "message": "PrismaClientInitializationError: Can't reach database server at `postgres-db:5432`",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Please make sure your database server is running at `postgres-db:5432`.",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at r (/app/node_modules/@prisma/client/runtime/library.js:112:2770)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Proxy.onModuleInit (/app/dist/prisma.service.js:14:9)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Promise.all (index 0)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async callModuleInitHook (/app/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.callInitHook (/app/node_modules/@nestjs/core/nest-application-context.js:252:13)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.init (/app/node_modules/@nestjs/core/nest-application.js:103:9)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.listen (/app/node_modules/@nestjs/core/nest-application.js:175:13)",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async bootstrap (/app/dist/main.js:8:5) {",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  clientVersion: '6.19.3',",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  errorCode: 'P1001',",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  retryable: undefined",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "}",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Node.js v22.22.2",
+          "timestamp": "2026-05-07T19:08:27.753Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile/posts, POST} route\u001b[39m\u001b[38;5;3m +8ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.666Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.657Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts/:id, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.656Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mProfileController {/api/profile}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.656Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAuthModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mProfileModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mHealthController {/}:\u001b[39m\u001b[38;5;3m +11ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/health, GET} route\u001b[39m\u001b[38;5;3m +3ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mAuthController {/auth}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/login, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/callback, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mPostsController {/api/posts}:\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.655Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mPostsModule dependencies initialized\u001b[39m\u001b[38;5;3m +3ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.642Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAppModule dependencies initialized\u001b[39m\u001b[38;5;3m +39ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.636Z"
+        },
+        {
+          "level": "INFO",
+          "message": " done",
+          "timestamp": "2026-05-07T19:08:27.629Z"
+        },
+        {
+          "level": "INFO",
+          "message": "server started",
+          "timestamp": "2026-05-07T19:08:27.629Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:27 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[NestFactory] \u001b[39m\u001b[32mStarting Nest application...\u001b[39m",
+          "timestamp": "2026-05-07T19:08:27.603Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.559 UTC [48] LOG:  database system is ready to accept connections",
+          "timestamp": "2026-05-07T19:08:27.559Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.535 UTC [51] LOG:  database system was shut down at 2026-05-07 19:08:26 UTC",
+          "timestamp": "2026-05-07T19:08:27.535Z"
+        },
+        {
+          "level": "INFO",
+          "message": "2026-05-07 19:08:27.479 UTC [48] LOG:  listening on Unix socket \"/var/run/postgresql/.s.PGSQL.5432\"",
+          "timestamp": "2026-05-07T19:08:27.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "waiting for server to start....2026-05-07 19:08:27.476 UTC [48] LOG:  starting PostgreSQL 15.17 (Debian 15.17-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+          "timestamp": "2026-05-07T19:08:27.476Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.383Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Success. You can now start the database server using:",
+          "timestamp": "2026-05-07T19:08:27.383Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.383Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    pg_ctl -D /var/lib/postgresql/data -l logfile start",
+          "timestamp": "2026-05-07T19:08:27.383Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.383Z"
+        },
+        {
+          "level": "INFO",
+          "message": "initdb: warning: enabling \"trust\" authentication for local connections",
+          "timestamp": "2026-05-07T19:08:27.382Z"
+        },
+        {
+          "level": "INFO",
+          "message": "initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.",
+          "timestamp": "2026-05-07T19:08:27.382Z"
+        },
+        {
+          "level": "INFO",
+          "message": "syncing data to disk ... ok",
+          "timestamp": "2026-05-07T19:08:27.382Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:27.382Z"
+        },
+        {
+          "level": "INFO",
+          "message": "performing post-bootstrap initialization ... ok",
+          "timestamp": "2026-05-07T19:08:26.612Z"
+        },
+        {
+          "level": "INFO",
+          "message": "/app/node_modules/@prisma/client/runtime/library.js:112",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "You may have to run ${qe(\"prisma generate\")} for your changes to take effect.`,this.config.clientVersion);return r}}parseEngineResponse(r){if(!r)throw new V(\"Response from the Engine was empty\",{clientVersion:this.config.clientVersion});try{return JSON.parse(r)}catch{throw new V(\"Unable to JSON.parse response from engine\",{clientVersion:this.config.clientVersion})}}async loadEngine(){if(!this.engine){this.QueryEngineConstructor||(this.library=await this.libraryLoader.loadLibrary(this.config),this.QueryEngineConstructor=this.library.QueryEngine);try{let r=new WeakRef(this);this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn));let t=await this.adapterPromise;t&&Re(\"Using driver adapter: %O\",t),this.engine=this.wrapEngine(new this.QueryEngineConstructor({datamodel:this.datamodel,env:process.env,logQueries:this.config.logQueries??!1,ignoreEnvVarErrors:!0,datasourceOverrides:this.datasourceOverrides??{},logLevel:this.logLevel,configDir:this.config.cwd,engineProtocol:\"json\",enableTracing:this.tracingHelper.isEnabled()},n=>{r.deref()?.logger(n)},t))}catch(r){let t=r,n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}}}logger(r){let t=this.parseEngineResponse(r);t&&(t.level=t?.level.toLowerCase()??\"unknown\",yf(t)?this.logEmitter.emit(\"query\",{timestamp:new Date,query:t.query,params:t.params,duration:Number(t.duration_ms),target:t.module_path}):bf(t)?this.loggerRustPanic=new ae(Po(this,`${t.message}: ${t.reason} in ${t.file}:${t.line}:${t.column}`),this.config.clientVersion):this.logEmitter.emit(t.level,{timestamp:new Date,message:t.message,target:t.module_path}))}parseInitError(r){try{return JSON.parse(r)}catch{}return r}parseRequestError(r){try{return JSON.parse(r)}catch{}return r}onBeforeExit(){throw new Error('\"beforeExit\" hook is not applicable to the library engine since Prisma 5.0.0, it is only relevant and implemented for the binary engine. Please add your event listener to the `process` object directly instead.')}async start(){if(this.libraryInstantiationPromise||(this.libraryInstantiationPromise=this.instantiateLibrary()),await this.libraryInstantiationPromise,await this.libraryStoppingPromise,this.libraryStartingPromise)return Re(`library already starting, this.libraryStarted: ${this.libraryStarted}`),this.libraryStartingPromise;if(this.libraryStarted)return;let r=async()=>{Re(\"library starting\");try{let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.connect(JSON.stringify(t)),this.libraryStarted=!0,this.adapterPromise||(this.adapterPromise=this.config.adapter?.connect()?.then(tn)),await this.adapterPromise,Re(\"library started\")}catch(t){let n=this.parseInitError(t.message);throw typeof n==\"string\"?t:new P(n.message,this.config.clientVersion,n.error_code)}finally{this.libraryStartingPromise=void 0}};return this.libraryStartingPromise=this.tracingHelper.runInChildSpan(\"connect\",r),this.libraryStartingPromise}async stop(){if(await this.libraryInstantiationPromise,await this.libraryStartingPromise,await this.executingQueryPromise,this.libraryStoppingPromise)return Re(\"library is already stopping\"),this.libraryStoppingPromise;if(!this.libraryStarted){await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0;return}let r=async()=>{await new Promise(n=>setImmediate(n)),Re(\"library stopping\");let t={traceparent:this.tracingHelper.getTraceParent()};await this.engine?.disconnect(JSON.stringify(t)),this.engine?.free&&this.engine.free(),this.engine=void 0,this.libraryStarted=!1,this.libraryStoppingPromise=void 0,this.libraryInstantiationPromise=void 0,await(await this.adapterPromise)?.dispose(),this.adapterPromise=void 0,Re(\"library stopped\")};return this.libraryStoppingPromise=this.tracingHelper.runInChildSpan(\"disconnect\",r),this.libraryStoppingPromise}version(){return this.versionInfo=this.library?.version(),this.versionInfo?.version??\"unknown\"}debugPanic(r){return this.library?.debugPanic(r)}async request(r,{traceparent:t,interactiveTransaction:n}){Re(`sending request, this.libraryStarted: ${this.libraryStarted}`);let i=JSON.stringify({traceparent:t}),o=JSON.stringify(r);try{await this.start();let s=await this.adapterPromise;this.executingQueryPromise=this.engine?.query(o,i,n?.id),this.lastQuery=o;let a=this.parseEngineResponse(await this.executingQueryPromise);if(a.errors)throw a.errors.length===1?this.buildQueryError(a.errors[0],s?.errorRegistry):new V(JSON.stringify(a.errors),{clientVersion:this.config.clientVersion});if(this.loggerRustPanic)throw this.loggerRustPanic;return{data:a}}catch(s){if(s instanceof P)throw s;if(s.code===\"GenericFailure\"&&s.message?.startsWith(\"PANIC:\"))throw new ae(Po(this,s.message),this.config.clientVersion);let a=this.parseRequestError(s.message);throw typeof a==\"string\"?s:new V(`${a.message}",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "ERROR",
+          "message": "PrismaClientInitializationError: Can't reach database server at `postgres-db:5432`",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Please make sure your database server is running at `postgres-db:5432`.",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at r (/app/node_modules/@prisma/client/runtime/library.js:112:2770)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Proxy.onModuleInit (/app/dist/prisma.service.js:14:9)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async Promise.all (index 0)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async callModuleInitHook (/app/node_modules/@nestjs/core/hooks/on-module-init.hook.js:43:5)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.callInitHook (/app/node_modules/@nestjs/core/nest-application-context.js:252:13)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.init (/app/node_modules/@nestjs/core/nest-application.js:103:9)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async NestApplication.listen (/app/node_modules/@nestjs/core/nest-application.js:175:13)",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "    at async bootstrap (/app/dist/main.js:8:5) {",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  clientVersion: '6.19.3',",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  errorCode: 'P1001',",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "  retryable: undefined",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "}",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Node.js v22.22.2",
+          "timestamp": "2026-05-07T19:08:26.227Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile/posts, POST} route\u001b[39m\u001b[38;5;3m +2ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.067Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/profile, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.066Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts/:id, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.065Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mProfileController {/api/profile}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.065Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mPostsController {/api/posts}:\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.064Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/posts, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.064Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/callback, GET} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.063Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/health, GET} route\u001b[39m\u001b[38;5;3m +2ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.062Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mAuthController {/auth}:\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.062Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/auth/login, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.062Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mHealthController {/}:\u001b[39m\u001b[38;5;3m +7ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.059Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mPostsModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.052Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAuthModule dependencies initialized\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.052Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mProfileModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.052Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:26 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mAppModule dependencies initialized\u001b[39m\u001b[38;5;3m +58ms\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.051Z"
+        },
+        {
+          "level": "INFO",
+          "message": "\u001b[32m[Nest] 1  - \u001b[39m05/07/2026, 7:08:25 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[NestFactory] \u001b[39m\u001b[32mStarting Nest application...\u001b[39m",
+          "timestamp": "2026-05-07T19:08:26.003Z"
+        },
+        {
+          "level": "INFO",
+          "message": "running bootstrap script ... ok",
+          "timestamp": "2026-05-07T19:08:25.964Z"
+        },
+        {
+          "level": "INFO",
+          "message": "creating configuration files ... ok",
+          "timestamp": "2026-05-07T19:08:25.574Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default time zone ... Etc/UTC",
+          "timestamp": "2026-05-07T19:08:25.573Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default shared_buffers ... 128MB",
+          "timestamp": "2026-05-07T19:08:25.566Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting default max_connections ... 100",
+          "timestamp": "2026-05-07T19:08:25.510Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The files belonging to this database system will be owned by user \"postgres\".",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "This user must also own the server process.",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The database cluster will be initialized with locale \"en_US.utf8\".",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The default database encoding has accordingly been set to \"UTF8\".",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "The default text search configuration will be set to \"english\".",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "Data page checksums are disabled.",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "fixing permissions on existing directory /var/lib/postgresql/data ... ok",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "creating subdirectories ... ok",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        },
+        {
+          "level": "INFO",
+          "message": "selecting dynamic shared memory implementation ... posix",
+          "timestamp": "2026-05-07T19:08:25.479Z"
+        }
+      ],
+      "artifacts": []
+    }
+  ]
+}

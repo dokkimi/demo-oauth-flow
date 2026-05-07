@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+  dokkimi-tests:
+    name: Dokkimi Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Dokkimi CLI
+        run: |
+          curl -fsSL https://get.dokkimi.com | sh
+          echo "$HOME/.dokkimi/bin" >> $GITHUB_PATH
+
+      - name: Install k3s
+        run: |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik --write-kubeconfig-mode=644" sh -
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          until kubectl get nodes | grep -q ' Ready'; do sleep 2; done
+          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> $GITHUB_ENV
+          NODE_IP=$(kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+          echo "CONTROL_TOWER_HOST=$NODE_IP" >> $GITHUB_ENV
+
+      - name: Build and import Docker image
+        run: |
+          docker build -t demo-oauth-flow:latest .
+          docker save demo-oauth-flow:latest | sudo k3s ctr images import -
+
+      - name: Run Dokkimi tests
+        timeout-minutes: 15
+        run: dokkimi run .dokkimi --ci
+
+      - name: Cleanup
+        if: always()
+        run: |
+          dokkimi clean 2>/dev/null || true
+          /usr/local/bin/k3s-uninstall.sh || true
+
+  publish:
+    name: Publish Docker Image
+    runs-on: ubuntu-latest
+    needs: dokkimi-tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/demo-oauth-flow
+          VERSION=$(node -p "require('./package.json').version")
+          docker build -t $IMAGE:latest -t $IMAGE:$VERSION .
+          docker push $IMAGE:latest
+          docker push $IMAGE:$VERSION

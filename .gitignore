@@ -1,0 +1,22 @@
+node_modules/
+.yarn/
+dist/
+.env
+*.env.local
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.tsbuildinfo

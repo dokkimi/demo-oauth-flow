@@ -1,0 +1,21 @@
+{
+  "type": "SERVICE",
+  "name": "api-service",
+  "image": "demo-oauth-flow:latest",
+  "port": 3000,
+  "healthCheck": "/health",
+  "env": [
+    {
+      "name": "DATABASE_URL",
+      "value": "postgresql://dokkimi:dokkimi@postgres-db:5432/dokkimi"
+    },
+    { "name": "OAUTH_DOMAIN", "value": "auth.provider.com" },
+    { "name": "OAUTH_CLIENT_ID", "value": "demo-client-id" },
+    { "name": "OAUTH_CLIENT_SECRET", "value": "demo-client-secret" },
+    {
+      "name": "OAUTH_REDIRECT_URI",
+      "value": "http://api-service:3000/auth/callback"
+    },
+    { "name": "NODE_ENV", "value": "test" }
+  ]
+}
