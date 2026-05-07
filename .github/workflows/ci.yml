@@ -34,10 +34,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install Dokkimi CLI
-        run: |
-          curl -fsSL https://get.dokkimi.com | sh
-          echo "$HOME/.dokkimi/bin" >> $GITHUB_PATH
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
 
       - name: Install k3s
         run: |
@@ -55,12 +57,12 @@ jobs:
 
       - name: Run Dokkimi tests
         timeout-minutes: 15
-        run: dokkimi run .dokkimi --ci
+        run: npx dokkimi run .dokkimi --ci
 
       - name: Cleanup
         if: always()
         run: |
-          dokkimi clean 2>/dev/null || true
+          npx dokkimi clean 2>/dev/null || true
           /usr/local/bin/k3s-uninstall.sh || true
 
   publish:
